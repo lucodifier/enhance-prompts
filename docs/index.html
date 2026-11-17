@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt Enhancer — do pedido solto ao prompt pronto para a IA</title>
+<meta name="description" content="App open source e self-hosted que transforma um pedido de uma linha em um prompt estruturado para IAs de código, e gera mensagens de commit e de Pull Request a partir do diff. Groq ou Ollama local.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Prompt Enhancer — do pedido solto ao prompt pronto para a IA">
+<meta property="og:description" content="Pedido de uma linha entra, prompt estruturado sai. Com modo Caveman para economizar tokens. Prompt → Commit → PR.">
+<meta name="theme-color" content="#0b0f0d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0f0d'/%3E%3Cpath d='M9 11l6 5-6 5' fill='none' stroke='%23b9f24c' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M17 22h7' stroke='%23ffb454' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0b0f0d; --ink-2:#111714; --ink-3:#18201c;
+  --line:#26312b; --line-2:#34423a;
+  --text:#e9efe8; --muted:#9aa89f; --dim:#6b786f;
+  --lime:#b9f24c; --lime-ink:#172004;
+  --amber:#ffb454; --red:#ff7a6b;
+  --display:"Bricolage Grotesque",system-ui,sans-serif;
+  --body:"Instrument Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --wrap:1120px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--ink);color:var(--text);font:400 17px/1.6 var(--body);
+  background-image:radial-gradient(900px 500px at 85% -10%,rgba(185,242,76,.10),transparent 60%),
+  radial-gradient(700px 420px at -10% 20%,rgba(255,180,84,.06),transparent 60%);
+  background-repeat:no-repeat}
+a{color:inherit}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+h1,h2,h3{font-family:var(--display);line-height:1.05;margin:0;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:clamp(30px,4.4vw,46px);font-weight:800}
+h3{font-size:21px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+p{margin:0}
+code,pre,.mono{font-family:var(--mono)}
+.eyebrow{font:500 13px/1 var(--mono);color:var(--lime);letter-spacing:.08em;text-transform:uppercase}
+.lead{color:var(--muted);font-size:19px;max-width:62ch}
+section{padding:96px 0}
+.sec-head{display:grid;gap:16px;margin-bottom:48px}
+:focus-visible{outline:2px solid var(--lime);outline-offset:3px;border-radius:6px}
+
+/* nav */
+header{position:sticky;top:0;z-index:20;background:rgba(11,15,13,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;justify-content:space-between;height:64px;gap:16px}
+.brand{display:flex;align-items:center;gap:10px;font:800 19px/1 var(--display);text-decoration:none;letter-spacing:-.02em}
+.brand svg{width:28px;height:28px;flex:none}
+.nav nav{display:flex;gap:28px;font-size:15px}
+.nav nav a{text-decoration:none;color:var(--muted);transition:color .15s}
+.nav nav a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:10px;font:600 15px/1 var(--body);text-decoration:none;border:1px solid transparent;cursor:pointer;transition:transform .15s,background .15s,border-color .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:var(--lime);color:var(--lime-ink)}
+.btn-primary:hover{background:#c8fa66}
+.btn-ghost{border-color:var(--line-2);color:var(--text);background:transparent}
+.btn-ghost:hover{border-color:var(--muted)}
+.btn-sm{padding:9px 14px;font-size:14px}
+
+/* hero */
+.hero{padding:72px 0 64px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid var(--line-2);border-radius:999px;font:500 13px/1 var(--mono);color:var(--muted)}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(185,242,76,.18)}
+.hero h1{font-size:clamp(40px,7.2vw,84px);font-weight:800;margin:24px 0 20px;max-width:15ch}
+.hero h1 em{font-style:normal;color:var(--lime)}
+.hero .lead{font-size:clamp(18px,2vw,21px)}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+
+/* demo */
+.demo{margin-top:56px;border:1px solid var(--line-2);border-radius:16px;background:var(--ink-2);overflow:hidden;box-shadow:0 40px 80px -40px rgba(0,0,0,.8)}
+.demo-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);font:500 13px/1 var(--mono);color:var(--dim)}
+.demo-bar .dots{display:flex;gap:6px}
+.demo-bar .dots span{width:10px;height:10px;border-radius:50%;background:var(--line-2)}
+.demo-grid{display:grid;grid-template-columns:5fr 7fr}
+.pane{padding:22px;min-width:0}
+.pane + .pane{border-left:1px solid var(--line)}
+.pane-label{display:flex;justify-content:space-between;align-items:center;gap:8px;font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:14px}
+.ask{font:400 15px/1.6 var(--mono);color:var(--text);background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:14px;min-height:92px}
+.ask::after{content:"";display:inline-block;width:8px;height:1.05em;background:var(--lime);vertical-align:-3px;margin-left:3px;animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chip{font:400 12px/1 var(--mono);padding:6px 9px;border-radius:6px;background:var(--ink-3);color:var(--muted);border:1px solid var(--line)}
+.switch{display:flex;align-items:center;gap:12px;margin-top:20px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--ink);cursor:pointer;user-select:none;width:100%;text-align:left;color:inherit;font:inherit}
+.switch .track{flex:none;width:42px;height:24px;border-radius:999px;background:var(--line-2);position:relative;transition:background .2s}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--text);transition:transform .2s}
+.switch[aria-checked="true"] .track{background:var(--amber)}
+.switch[aria-checked="true"] .track::after{transform:translateX(18px);background:var(--ink)}
+.switch b{display:block;font-weight:600;font-size:15px}
+.switch small{color:var(--dim);font-size:13px}
+.out{font:400 13.5px/1.65 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;margin:0;min-height:430px;color:#cfd8d0}
+.out .h{color:var(--lime);font-weight:700}
+.caveman .out .h{color:var(--amber)}
+.out span{display:block;animation:rise .35s both}
+.out span:empty::before{content:"\00a0"}
+@keyframes rise{from{opacity:0;transform:translateY(4px)}}
+.meter{font:500 12px/1 var(--mono);color:var(--muted);text-transform:none;letter-spacing:0}
+.meter b{color:var(--lime)} .caveman .meter b{color:var(--amber)}
+.demo-note{padding:10px 16px;border-top:1px solid var(--line);font-size:13px;color:var(--dim)}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:14px;margin-top:40px;overflow:hidden}
+.stats div{padding:22px 24px}
+.stats div + div{border-left:1px solid var(--line)}
+.stats b{display:block;font:800 30px/1.1 var(--display);letter-spacing:-.02em}
+.stats span{color:var(--muted);font-size:15px}
+
+/* flow */
+.flow{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.flow>*,.duo>*,.anatomy>*,.rules>*,.steps>*{min-width:0}
+.card{border:1px solid var(--line);border-radius:14px;background:var(--ink-2);padding:26px;display:grid;gap:12px;align-content:start;transition:border-color .2s,transform .2s}
+.card:hover{border-color:var(--line-2);transform:translateY(-2px)}
+.card p{color:var(--muted);font-size:16px}
+.step{font:500 13px/1 var(--mono);color:var(--dim)}
+.step b{color:var(--lime)}
+.io{font:400 12.5px/1.5 var(--mono);color:var(--muted);background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-wrap:anywhere}
+.io em{font-style:normal;color:var(--text)}
+
+/* anatomy */
+.anatomy{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start}
+.parts{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.parts li{display:grid;grid-template-columns:190px 1fr;gap:16px;padding:16px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.parts code{color:var(--lime);font-size:14px}
+.parts span{color:var(--muted);font-size:16px}
+.modes{display:grid;gap:16px}
+.mode{border:1px solid var(--line);border-radius:14px;padding:24px;background:var(--ink-2)}
+.mode h3{display:flex;align-items:center;gap:10px}
+.mode p{color:var(--muted);margin-top:8px;font-size:16px}
+.tag{font:500 11px/1 var(--mono);padding:5px 7px;border-radius:5px;background:var(--ink-3);color:var(--muted);border:1px solid var(--line);letter-spacing:.04em}
+
+/* caveman */
+.cave{background:var(--ink-2);border-block:1px solid var(--line)}
+.cave .eyebrow{color:var(--amber)}
+.diff{display:grid;gap:14px;margin-top:8px}
+.diff-row{border:1px solid var(--line);border-radius:14px;padding:22px 24px;background:var(--ink)}
+.diff-row .pane-label{margin-bottom:10px}
+.diff-row p{font:400 clamp(15px,1.7vw,18px)/1.7 var(--mono)}
+.diff-row del{color:var(--dim);text-decoration-color:var(--red);text-decoration-thickness:2px}
+.diff-row.after{border-color:rgba(255,180,84,.45)}
+.diff-row.after p{color:var(--amber)}
+.rules{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:40px}
+.rules p{color:var(--muted);font-size:16px}
+.rules b{color:var(--text);display:block;margin-bottom:4px;font-family:var(--display);font-size:18px}
+
+/* providers */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.duo ul{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:10px;color:var(--muted);font-size:16px}
+.duo li{padding-left:22px;position:relative}
+.duo li::before{content:"";position:absolute;left:0;top:.62em;width:10px;height:2px;background:var(--lime)}
+.stack{display:flex;flex-wrap:wrap;gap:8px;margin-top:40px}
+.stack .chip{font-size:13px;padding:9px 12px}
+
+/* start */
+.steps{display:grid;gap:14px;counter-reset:s}
+.cmd{display:grid;grid-template-columns:56px 1fr;border:1px solid var(--line);border-radius:14px;background:var(--ink-2);overflow:hidden}
+.cmd::before{counter-increment:s;content:counter(s);display:grid;place-items:center;font:800 24px/1 var(--display);color:var(--lime);border-right:1px solid var(--line)}
+.cmd > div{padding:18px 20px;min-width:0}
+.cmd h3{font-size:18px}
+.cmd p{color:var(--muted);font-size:15px;margin-top:4px}
+.code{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-top:12px;background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.code pre{margin:0;font-size:13.5px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;color:#cfd8d0}
+.copy{flex:none;font:500 12px/1 var(--mono);color:var(--muted);background:var(--ink-3);border:1px solid var(--line-2);border-radius:6px;padding:7px 9px;cursor:pointer}
+.copy:hover{color:var(--text)}
+.final{margin-top:56px;border:1px solid var(--line-2);border-radius:18px;padding:48px 32px;text-align:center;background:linear-gradient(180deg,rgba(185,242,76,.08),transparent 70%),var(--ink-2)}
+.final h2{max-width:18ch;margin:0 auto 12px}
+.final p{color:var(--muted);max-width:52ch;margin:0 auto}
+.final .cta{justify-content:center}
+
+footer{border-top:1px solid var(--line);padding:36px 0;color:var(--dim);font-size:15px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;align-items:center}
+footer a{color:var(--muted);text-decoration:none}
+footer a:hover{color:var(--text)}
+footer .links{display:flex;gap:22px}
+
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .6s,transform .6s}
+.reveal.in{opacity:1;transform:none}
+
+@media (max-width:900px){
+  section{padding:68px 0}
+  .nav nav{display:none}
+  .demo-grid,.anatomy,.duo,.flow,.rules{grid-template-columns:1fr}
+  .pane + .pane{border-left:0;border-top:1px solid var(--line)}
+  .out{min-height:0}
+  .anatomy{gap:36px}
+}
+@media (max-width:560px){
+  .wrap{padding:0 16px}
+  .stats{grid-template-columns:1fr}
+  .stats div + div{border-left:0;border-top:1px solid var(--line)}
+  .parts li{grid-template-columns:1fr;gap:4px}
+  .cmd{grid-template-columns:40px 1fr}
+  .final{padding:36px 20px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top" aria-label="Prompt Enhancer">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#18201c"/><path d="M9 11l6 5-6 5" fill="none" stroke="#b9f24c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 22h7" stroke="#ffb454" stroke-width="3" stroke-linecap="round"/></svg>
+      Prompt Enhancer
+    </a>
+    <nav aria-label="Seções">
+      <a href="#fluxo">Fluxo</a>
+      <a href="#anatomia">Anatomia</a>
+      <a href="#caveman">Caveman</a>
+      <a href="#modelos">Modelos</a>
+      <a href="#rodar">Rodar</a>
+    </nav>
+    <a class="btn btn-ghost btn-sm" href="https://github.com/lucodifier/enhance-prompts" target="_blank" rel="noopener">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="wrap">
+    <span class="pill"><i></i>open source · self-hosted · Groq ou Ollama</span>
+    <h1>Pedido de uma linha entra. <em>Prompt pronto</em> sai.</h1>
+    <p class="lead">Prompt Enhancer transforma uma tarefa mal descrita em um prompt estruturado, pronto para colar na sua IA de código. Depois, gera a mensagem de commit e a descrição do PR a partir do diff.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#rodar">Rodar com Docker</a>
+      <a class="btn btn-ghost" href="https://github.com/lucodifier/enhance-prompts" target="_blank" rel="noopener">Ver código no GitHub</a>
+    </div>
+
+    <div class="demo" id="demo">
+      <div class="demo-bar">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <span>dashboard / prompt</span>
+        <span>mode: direct</span>
+      </div>
+      <div class="demo-grid">
+        <div class="pane">
+          <div class="pane-label"><span>Pedido da tarefa</span><span class="meter" id="inCount"></span></div>
+          <div class="ask" id="ask">renomear o campo nome pra título na rota /users, sem quebrar validação, api e tela</div>
+          <div class="chips" aria-label="Context Pack">
+            <span class="chip">app/users/page.tsx</span>
+            <span class="chip">app/api/users/route.ts</span>
+            <span class="chip">validação: Zod</span>
+          </div>
+          <button class="switch" id="cave" role="switch" aria-checked="false">
+            <span class="track" aria-hidden="true"></span>
+            <span><b>Comprimir com Caveman</b><small>Mesma substância técnica, menos tokens</small></span>
+          </button>
+        </div>
+        <div class="pane">
+          <div class="pane-label"><span>Prompt final</span><span class="meter" id="outCount"></span></div>
+          <pre class="out" id="out" aria-live="polite"></pre>
+        </div>
+      </div>
+      <div class="demo-note">Exemplo ilustrativo. No app, o texto é gerado pelo modelo que você configurar.</div>
+    </div>
+
+    <div class="stats">
+      <div><b>3 fluxos</b><span>Prompt, commit e Pull Request</span></div>
+      <div><b>5 seções</b><span>Estrutura fixa em todo prompt gerado</span></div>
+      <div><b>2 provedores</b><span>Groq na nuvem ou Ollama local</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="fluxo">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Fluxo</span>
+      <h2>Do pedido ao Pull Request, sem escrever texto repetido</h2>
+      <p class="lead">Três telas que seguem a ordem do trabalho: pedir, commitar e abrir o PR.</p>
+    </div>
+    <div class="flow">
+      <article class="card reveal">
+        <span class="step"><b>01</b> · Prompt</span>
+        <h3>Prompt de vibecoding</h3>
+        <p>Descreva a mudança em poucas linhas e, se quiser, cole um Context Pack com caminhos, trechos e convenções. Sai um prompt em Markdown, pronto para Copilot, Codex, Continue ou qualquer IA com acesso ao repositório.</p>
+        <div class="io">entrada: <em>tarefa + contexto opcional</em></div>
+      </article>
+      <article class="card reveal">
+        <span class="step"><b>02</b> · Commit</span>
+        <h3>Mensagem de commit</h3>
+        <p>Cole o resultado de <code>git diff --staged</code>. O app devolve uma linha no padrão Conventional Commits, no imperativo e com até 72 caracteres.</p>
+        <div class="io">saída: <em>feat(users): rename nome field to titulo</em></div>
+      </article>
+      <article class="card reveal">
+        <span class="step"><b>03</b> · Pull Request</span>
+        <h3>Descrição de PR</h3>
+        <p>Cole o diff do branch ou a lista de commits. A descrição segue o template de PR que você salvou nas configurações.</p>
+        <div class="io">entrada: <em>git diff origin/main...HEAD</em></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="anatomia">
+  <div class="wrap anatomy">
+    <div class="reveal">
+      <div class="sec-head">
+        <span class="eyebrow">Anatomia</span>
+        <h2>Todo prompt sai com a mesma estrutura</h2>
+        <p class="lead">A IA de código erra menos quando sabe o objetivo, os limites e como o resultado será conferido. Por isso a saída tem sempre cinco seções.</p>
+      </div>
+      <ul class="parts">
+        <li><code># Goal</code><span>O objetivo em uma frase.</span></li>
+        <li><code># Context</code><span>Só os fatos úteis: stack, rotas, padrões e caminhos suspeitos.</span></li>
+        <li><code># Constraints</code><span>O que não pode mudar: build, padrões, escopo mínimo.</span></li>
+        <li><code># Tasks</code><span>Passos ordenados, cada um acionável.</span></li>
+        <li><code># Acceptance criteria</code><span>Itens verificáveis que dizem quando a tarefa acabou.</span></li>
+      </ul>
+    </div>
+    <div class="modes reveal">
+      <div class="mode">
+        <h3>Direct <span class="tag">implementar já</span></h3>
+        <p>Para mudanças em que você já sabe onde mexer. As tarefas vão direto à implementação.</p>
+      </div>
+      <div class="mode">
+        <h3>Two-phase <span class="tag">descobrir → implementar</span></h3>
+        <p>Para código que você não conhece. A fase 1 manda a IA localizar arquivos e listar o plano sem editar nada. A fase 2 executa.</p>
+      </div>
+      <div class="mode">
+        <h3>Histórico</h3>
+        <p>Salve o par pedido e prompt para reusar depois. Cada usuário entra com a conta Google e tem as próprias configurações e chave.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="caveman" class="cave">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Modo Caveman</span>
+      <h2>Corta as palavras. Mantém a instrução.</h2>
+      <p class="lead">Com o Caveman ligado, o prompt perde artigos, conectivos e preenchimento. Nomes, caminhos e código ficam exatos. Menos tokens enviados a cada execução.</p>
+    </div>
+    <div class="diff reveal">
+      <div class="diff-row">
+        <div class="pane-label"><span>Normal</span><span class="meter">21 palavras</span></div>
+        <p><del>O objetivo desta tarefa é</del> renomear <del>a função</del> getUser para fetchUser <del>no arquivo de</del> serviços para <del>manter a</del> consistência <del>da</del> API.</p>
+      </div>
+      <div class="diff-row after">
+        <div class="pane-label"><span>Caveman</span><span class="meter"><b style="color:var(--amber)">9 palavras</b></span></div>
+        <p>Renomear getUser para fetchUser em serviços para consistência API.</p>
+      </div>
+    </div>
+    <div class="rules">
+      <p class="reveal"><b>Sem artigos</b>O, a, um, uma: fora. A IA entende igual.</p>
+      <p class="reveal"><b>Frases curtas</b>Fragmentos no padrão item, ação, motivo.</p>
+      <p class="reveal"><b>Código intacto</b>Identificadores, caminhos e trechos nunca são abreviados.</p>
+    </div>
+  </div>
+</section>
+
+<section id="modelos">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Modelos</span>
+      <h2>Escolha onde o modelo roda</h2>
+      <p class="lead">Provedor e modelo são configurados por usuário, e podem ser diferentes para prompt, commit e PR.</p>
+    </div>
+    <div class="duo">
+      <article class="card reveal">
+        <span class="step"><b>Nuvem</b></span>
+        <h3>Groq</h3>
+        <ul>
+          <li>Usa a sua própria chave de API.</li>
+          <li>Em modo <code>auto</code>, consulta os modelos disponíveis e escolhe um.</li>
+          <li>Padrão: <code>llama-3.3-70b-versatile</code>.</li>
+        </ul>
+      </article>
+      <article class="card reveal">
+        <span class="step"><b>Local</b></span>
+        <h3>Ollama</h3>
+        <ul>
+          <li>Nada sai da sua máquina: o diff e o código ficam locais.</li>
+          <li>Detecta os modelos instalados e prefere os de código para commit e PR.</li>
+          <li>Se o modelo configurado foi removido, tenta outro instalado.</li>
+        </ul>
+      </article>
+    </div>
+    <div class="stack reveal" aria-label="Stack">
+      <span class="chip">Next.js 16 · App Router</span>
+      <span class="chip">React 19</span>
+      <span class="chip">TypeScript</span>
+      <span class="chip">Tailwind CSS 4</span>
+      <span class="chip">Vercel AI SDK</span>
+      <span class="chip">NextAuth · Google</span>
+      <span class="chip">PostgreSQL 16</span>
+      <span class="chip">Docker Compose</span>
+    </div>
+  </div>
+</section>
+
+<section id="rodar">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Rodar</span>
+      <h2>Sobe em um container</h2>
+      <p class="lead">App e banco sobem juntos com Docker Compose. Você só precisa das credenciais do Google OAuth e de uma chave Groq ou um Ollama rodando.</p>
+    </div>
+    <div class="steps">
+      <div class="cmd reveal"><div>
+        <h3>Clonar</h3>
+        <div class="code"><pre>git clone https://github.com/lucodifier/enhance-prompts.git
+cd enhance-prompts</pre><button class="copy" type="button">copiar</button></div>
+      </div></div>
+      <div class="cmd reveal"><div>
+        <h3>Configurar o ambiente</h3>
+        <p>Copie o modelo e preencha <code>NEXTAUTH_SECRET</code>, as credenciais do Google OAuth e, se for usar, a chave Groq.</p>
+        <div class="code"><pre>cp .env.docker.example .env.docker</pre><button class="copy" type="button">copiar</button></div>
+      </div></div>
+      <div class="cmd reveal"><div>
+        <h3>Subir</h3>
+        <p>Depois, aplique os scripts SQL da pasta <code>scripts/</code> em ordem e abra <code>http://localhost:8080</code>.</p>
+        <div class="code"><pre>docker compose up -d --build</pre><button class="copy" type="button">copiar</button></div>
+      </div></div>
+    </div>
+
+    <div class="final reveal">
+      <h2>Menos tempo explicando, mais tempo revisando</h2>
+      <p>O código é aberto. Leia o prompt de sistema, troque o modelo e adapte ao seu fluxo.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/lucodifier/enhance-prompts" target="_blank" rel="noopener">Abrir o repositório</a>
+        <a class="btn btn-ghost" href="https://github.com/lucodifier/enhance-prompts/issues" target="_blank" rel="noopener">Reportar um problema</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Prompt Enhancer · feito por <a href="https://github.com/lucodifier" target="_blank" rel="noopener">Luciano Rieth</a></span>
+    <div class="links">
+      <a href="https://github.com/lucodifier/enhance-prompts" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/lucodifier/enhance-prompts/issues" target="_blank" rel="noopener">Issues</a>
+      <a href="https://lucodifier.github.io/dachshund-landing" target="_blank" rel="noopener">Dachshund</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var NORMAL = [
+'# Goal',
+'Renomear o campo "nome" para "título" no fluxo de /users, mantendo validações, API e UI compatíveis.',
+'',
+'# Context',
+'- Stack: Next.js App Router + TypeScript; validação com Zod.',
+'- Arquivos prováveis: app/users/page.tsx e app/api/users/route.ts.',
+'- Migrações de banco ficam em /scripts.',
+'',
+'# Constraints',
+'- Alterar o mínimo necessário, sem refactors paralelos.',
+'- Não quebrar o build nem os contratos já consumidos pela UI.',
+'',
+'# Tasks',
+'1. Localizar todos os usos de "nome" em /users (UI, API, schema Zod, queries).',
+'2. Renomear o campo no schema e nos tipos.',
+'3. Atualizar a rota da API e o formulário da tela.',
+'4. Criar o script de migração da coluna em /scripts.',
+'',
+'# Acceptance criteria',
+'- Criar e editar usuário funciona com "título".',
+'- Nenhuma referência a "nome" resta no fluxo de /users.',
+'- Build e lint passam.'
+  ];
+  var CAVE = [
+'# Goal',
+'Renomear campo "nome" → "título" em /users. Manter validação, API, UI.',
+'',
+'# Context',
+'- Next.js App Router, TS, Zod.',
+'- Alvos: app/users/page.tsx, app/api/users/route.ts.',
+'- Migrações: /scripts.',
+'',
+'# Constraints',
+'- Mudança mínima. Sem refactor.',
+'- Build intacto.',
+'',
+'# Tasks',
+'1. Buscar usos "nome" em /users.',
+'2. Renomear schema + tipos.',
+'3. Atualizar API + form.',
+'4. Script migração coluna.',
+'',
+'# Acceptance criteria',
+'- CRUD usuário funciona com "título".',
+'- Zero "nome" em /users.',
+'- Build + lint ok.'
+  ];
+  function words(lines){
+    return lines.join(' ').split(/\s+/).filter(function(w){return /[\wÀ-ÿ]/.test(w)}).length;
+  }
+  var out = document.getElementById('out'),
+      outCount = document.getElementById('outCount'),
+      demo = document.getElementById('demo'),
+      sw = document.getElementById('cave'),
+      base = words(NORMAL);
+
+  document.getElementById('inCount').textContent =
+    words([document.getElementById('ask').textContent]) + ' palavras';
+
+  function render(lines, isCave){
+    out.textContent = '';
+    lines.forEach(function(line, i){
+      var s = document.createElement('span');
+      s.textContent = line;
+      if (line.charAt(0) === '#') s.className = 'h';
+      s.style.animationDelay = (i * 28) + 'ms';
+      out.appendChild(s);
+    });
+    var n = words(lines);
+    outCount.innerHTML = '';
+    var b = document.createElement('b');
+    b.textContent = n + ' palavras';
+    outCount.appendChild(b);
+    if (isCave) outCount.appendChild(document.createTextNode(' · −' + Math.round((1 - n / base) * 100) + '%'));
+    demo.classList.toggle('caveman', isCave);
+  }
+  sw.addEventListener('click', function(){
+    var on = sw.getAttribute('aria-checked') !== 'true';
+    sw.setAttribute('aria-checked', String(on));
+    render(on ? CAVE : NORMAL, on);
+  });
+  render(NORMAL, false);
+
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var text = btn.parentNode.querySelector('pre').textContent;
+      var done = function(){ btn.textContent = 'copiado'; setTimeout(function(){ btn.textContent = 'copiar'; }, 1600); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function(){});
+    });
+  });
+
+  var items = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, {threshold: .12});
+    items.forEach(function(el){ io.observe(el); });
+  } else {
+    items.forEach(function(el){ el.classList.add('in'); });
+  }
+})();
+</script>
+</body>
+</html>
